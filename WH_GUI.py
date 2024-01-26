@@ -24,7 +24,7 @@ def create_result(*args):
 # save generated sheet to csv file
 def save_to_csv(result):
     with open('./sheet.csv', 'w') as file:
-        writer = csv.writer(file)
+        writer = csv.writer(file, lineterminator='\n')
         writer.writerow(('bar-code', 'case number', 'parent kit-code', 'gender', 'age'))
         writer.writerows(result)
 
