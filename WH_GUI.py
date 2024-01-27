@@ -6,6 +6,7 @@ def insertBarcodeBox(indx, barcode):
     barcodeListBox.configure(state=NORMAL)
     barcodeListBox.insert(END, "#" + str(indx) + " - " + barcode + '\n')
     barcodeListBox.configure(state=DISABLED)
+    barcodeListBox.see(END)
 
 def clear_barcode_box():
     barcodeListBox.configure(state=NORMAL)
