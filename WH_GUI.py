@@ -19,7 +19,7 @@ def clear_all_input():
 
 def create_result(*args):
     barcode = scannedBarcode.get()
-    if barcode and barcode[-3:] == 'BXE':
+    if barcode and barcode[-3:] == suffix.get():
         barcodeList.append(barcode)
         insertBarcodeBox(len(barcodeList), barcode)
 
@@ -88,28 +88,35 @@ window.title("Women's Health ___ Snowflake")
 barcodeList = []
 scannedBarcode = StringVar()
 scannedBarcode.trace_add("write", create_result)
+suffixList = ["BXE", "BXS"]
+suffix = StringVar()
+suffix.set("BXE")
 
 buttonFrame = Frame()
 buttonFrame.pack()
 
+# suffix list option
+suffixOption = OptionMenu(buttonFrame, suffix, *suffixList)
+suffixOption.grid(column=0, row=0, padx=10, pady=(10,0))
+
 # clear list button
 clearListButton = Button(master=buttonFrame, text="Clear", command=clear_all_input, takefocus=0)
-clearListButton.grid(column=0, row=0, padx=10, pady=(10,0))
+clearListButton.grid(column=1, row=0, padx=10, pady=(10,0))
 
 # query button
 queryButton = Button(master=buttonFrame, text="Query", command=query_snowflake, takefocus=0)
-queryButton.grid(column=1, row=0, padx=10, pady=(10,0))
+queryButton.grid(column=2, row=0, padx=10, pady=(10,0))
 
 # generate list button
 generateListButton = Button(master=buttonFrame, text="Get List", command=generate_list_string, takefocus=0)
-generateListButton.grid(column=2,row=0,padx=10,pady=(10,0))
+generateListButton.grid(column=3,row=0,padx=10,pady=(10,0))
 
 # remove code enter box
 codeRemoveEntry = Entry(master=buttonFrame, width=8, takefocus=0)
-codeRemoveEntry.grid(column=3,row=0,padx=20, pady=(10,0))
+codeRemoveEntry.grid(column=4,row=0,padx=20, pady=(10,0))
 # remove code button
 codeRmoveButton = Button(master=buttonFrame, text="Remove", command=remove_index_barcode, takefocus=0)
-codeRmoveButton.grid(column=3,row=1,pady=(0,10))
+codeRmoveButton.grid(column=4,row=1,pady=(0,10))
 
 # input/scan box title
 inputBoxTitle = Label(text="# Scan Barcode into Below #")
