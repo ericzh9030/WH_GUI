@@ -50,9 +50,15 @@ def query_snowflake():
         sheet.insert('', END, values=case)
 
     sheet.grid(row=0, column=0)
+
+    saveButtonFrame = Frame(master=popWindow)
+    saveButtonFrame.grid(row=1)
     # save to csv button
-    saveButton = Button(master=popWindow, text="Save", command=save_to_csv(result))
-    saveButton.grid()
+    saveButton = Button(master=saveButtonFrame, text="Save", command=save_to_csv(result))
+    saveButton.grid(row=0, column=0)
+
+    sheetButton = Button(master=saveButtonFrame, text="Bechworksheet", command=generate_benchworksheet(result))
+    sheetButton.grid(row=0, column=1)
 
 
 def generate_list_string():
@@ -78,6 +84,49 @@ def remove_index_barcode():
         codeRemoveEntry.delete(0,END)
     except:
         codeRemoveEntry.delete(0,END)
+
+
+def generate_benchworksheet(result):
+    header = """
+    <!DOCTYPE html>
+    <html>
+    <style>
+    table, th, td {
+    border:1px solid black;
+    }
+    </style>
+    <body>
+
+    <h2>A basic HTML table</h2>
+
+    <table style="width:100%">
+    <tr>
+        <th>bar-code</th>
+        <th>case number</th>
+        <th>parent kit-code</th>
+        <th>gender</th>
+        <th>age</th>
+    </tr>
+    """
+
+    singleCase = "<tr><td>barcode</td><td>caseNumber</td><td>parentKitCode</td><td>gender</td><td>age</td></tr>"
+
+    ending = """
+    </table>
+    <p>To understand the example better, we have added borders to the table.</p>
+    </body>
+    </html>
+    """
+    
+    file = open('./benchworksheet.html', 'w')
+    file.write(header)
+
+    for caseNum in result:
+        file.write(singleCase.format(caseNum[0], caseNum[1], caseNum[2], caseNum[3], caseNum[4]))
+
+    file.write(ending)
+
+    file.close()
         
 
 # app name
