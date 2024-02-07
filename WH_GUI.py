@@ -2,6 +2,15 @@ from tkinter import *
 from tkinter import ttk
 import csv
 
+import subprocess
+import sys
+
+try:
+    import snowflake.connector
+except:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "snowflake-connector-python"])
+
+
 def insertBarcodeBox(indx, barcode):
     barcodeListBox.configure(state=NORMAL)
     barcodeListBox.insert(END, "#" + str(indx) + " - " + barcode + '\n')
@@ -30,48 +39,55 @@ def save_to_csv(result):
         writer.writerow(('bar-code', 'case number', 'parent kit-code', 'gender', 'age'))
         writer.writerows(result)
 
-# fake query now
+# SnowFlake query
 def query_snowflake():
     popWindow = Toplevel()
 
-    columns = ('bar-code', 'case number', 'parent kit-code', 'gender', 'age')
+    columns = ('Casefile ID', 'Sample Age')
     sheet = ttk.Treeview(popWindow, columns=columns, show='headings', height=20)
     for col in columns:
         sheet.heading(col, text=col)
 
-    caseNumber = "123456789"
-    parent = "0000000-SB"
-    gender = 'F'
-    age = '2'
+    listString = generate_barcode_list_string()
 
-    result = [["#"+str(indx+1)+" - "+barcode,caseNumber,parent,gender,age] for indx, barcode in enumerate(barcodeList)]
+    sqlQuery = """select casefile_id as "Casefile ID", DATEDIFF(DAY, samp.collectiondate, CURRENT_DATE) AS "Sample Age" from "LIMSDB"."LIMSDB_PRODLIMS"."PARENTKIT" pk
+    LEFT JOIN "LIMSDB"."LIMSDB_PRODLIMS"."PARENTKIT_SAMPLE" pks ON pk.id = pks.parentkit_id
+    LEFT JOIN "LIMSDB"."LIMSDB_PRODLIMS"."SAMPLE" samp ON pks.sample_id = samp.id
+    WHERE  samp.barcode IN (""" + listString + """);"""
 
-    for case in result:
-        sheet.insert('', END, values=case)
+    result = snowFlakeCursor.execute(sqlQuery)
+    copyResult = []
+
+    for res in result:
+        copyResult.append(res)
+        sheet.insert('', END, values=res)
 
     sheet.grid(row=0, column=0)
 
     saveButtonFrame = Frame(master=popWindow)
     saveButtonFrame.grid(row=1)
     # save to csv button
-    saveButton = Button(master=saveButtonFrame, text="Save", command=save_to_csv(result))
+    saveButton = Button(master=saveButtonFrame, text="Save", command=save_to_csv(copyResult))
     saveButton.grid(row=0, column=0)
 
-    sheetButton = Button(master=saveButtonFrame, text="Bechworksheet", command=generate_benchworksheet(result))
+    # save to HTML benchworksheet
+    sheetButton = Button(master=saveButtonFrame, text="Bechworksheet", command=generate_benchworksheet(copyResult))
     sheetButton.grid(row=0, column=1)
 
-
-def generate_list_string():
-    popWindow = Toplevel()
-
+def generate_barcode_list_string():
     delim = "','"
     listString = delim.join(barcodeList)
     listString = "'" + listString + "'"
+    return listString
+
+# display barcode string list on pop up window
+def get_barcode_list_string():
+    popWindow = Toplevel()
+    listString = generate_barcode_list_string()
     textBox = Text(master=popWindow)
     textBox.pack()
     textBox.insert(END, listString)
     textBox.configure(state=DISABLED)
-
 
 def remove_index_barcode():
     try:
@@ -96,20 +112,15 @@ def generate_benchworksheet(result):
     }
     </style>
     <body>
-
     <h2>A basic HTML table</h2>
-
     <table style="width:100%">
     <tr>
-        <th>bar-code</th>
-        <th>case number</th>
-        <th>parent kit-code</th>
-        <th>gender</th>
-        <th>age</th>
+        <th>Casefile ID</th>
+        <th>Sample Age</th>
     </tr>
     """
 
-    singleCase = "<tr><td>barcode</td><td>caseNumber</td><td>parentKitCode</td><td>gender</td><td>age</td></tr>"
+    singleCase = "<tr><td>{caseFileId}</td><td>{sampleAge}</td></tr>"
 
     ending = """
     </table>
@@ -117,17 +128,18 @@ def generate_benchworksheet(result):
     </body>
     </html>
     """
-    
-    file = open('./benchworksheet.html', 'w')
-    file.write(header)
 
-    for caseNum in result:
-        file.write(singleCase.format(caseNum[0], caseNum[1], caseNum[2], caseNum[3], caseNum[4]))
+    with open('./benchworksheet.html', 'w') as file:
+        file.write(header)
+        for res in result:
+            file.write(singleCase.format(caseFileId=res[0], sampleAge=res[1]))
+        file.write(ending)
 
-    file.write(ending)
 
-    file.close()
-        
+def log_in_SnowFlake():
+    global snowFlakeCursor
+    credentials = {'account': 'natera', 'user': userNameEntry.get(), 'authenticator': 'externalbrowser'}
+    snowFlakeCursor = snowflake.connector.connect(**credentials).cursor()
 
 # app name
 window = Tk()
@@ -140,32 +152,39 @@ scannedBarcode.trace_add("write", create_result)
 suffixList = ["BXE", "BXS"]
 suffix = StringVar()
 suffix.set("BXE")
+snowFlakeCursor = None
 
 buttonFrame = Frame()
 buttonFrame.pack()
 
+# log-in username input
+userNameEntry = Entry(master=buttonFrame, width=10, takefocus=0)
+logInButton = Button(master=buttonFrame, text="LogIn", command=log_in_SnowFlake, takefocus=0)
+userNameEntry.grid(column=0,row=0, padx=20, pady=(10,0))
+logInButton.grid(column=0, row=1, pady=(0,10)) 
+
 # suffix list option
 suffixOption = OptionMenu(buttonFrame, suffix, *suffixList)
-suffixOption.grid(column=0, row=0, padx=10, pady=(10,0))
+suffixOption.grid(column=1, row=0, padx=10, pady=(10,0))
 
 # clear list button
 clearListButton = Button(master=buttonFrame, text="Clear", command=clear_all_input, takefocus=0)
-clearListButton.grid(column=1, row=0, padx=10, pady=(10,0))
+clearListButton.grid(column=2, row=0, padx=10, pady=(10,0))
 
 # query button
 queryButton = Button(master=buttonFrame, text="Query", command=query_snowflake, takefocus=0)
-queryButton.grid(column=2, row=0, padx=10, pady=(10,0))
+queryButton.grid(column=3, row=0, padx=10, pady=(10,0))
 
 # generate list button
-generateListButton = Button(master=buttonFrame, text="Get List", command=generate_list_string, takefocus=0)
-generateListButton.grid(column=3,row=0,padx=10,pady=(10,0))
+generateListButton = Button(master=buttonFrame, text="Get List", command=get_barcode_list_string, takefocus=0)
+generateListButton.grid(column=4,row=0,padx=10,pady=(10,0))
 
 # remove code enter box
 codeRemoveEntry = Entry(master=buttonFrame, width=8, takefocus=0)
-codeRemoveEntry.grid(column=4,row=0,padx=20, pady=(10,0))
+codeRemoveEntry.grid(column=5,row=0,padx=20, pady=(10,0))
 # remove code button
 codeRmoveButton = Button(master=buttonFrame, text="Remove", command=remove_index_barcode, takefocus=0)
-codeRmoveButton.grid(column=4,row=1,pady=(0,10))
+codeRmoveButton.grid(column=5,row=1,pady=(0,10))
 
 # input/scan box title
 inputBoxTitle = Label(text="# Scan Barcode into Below #")
