@@ -2,13 +2,13 @@ from tkinter import *
 from tkinter import ttk
 import csv
 
-import subprocess
-import sys
-
 try:
     import snowflake.connector
 except:
+    import subprocess
+    import sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "snowflake-connector-python"])
+    import snowflake.connector
 
 
 def insertBarcodeBox(indx, barcode):
@@ -36,7 +36,7 @@ def create_result(*args):
 def save_to_csv(result):
     with open('./sheet.csv', 'w') as file:
         writer = csv.writer(file, lineterminator='\n')
-        writer.writerow(('bar-code', 'case number', 'parent kit-code', 'gender', 'age'))
+        writer.writerow(('Casefile ID', 'Age'))
         writer.writerows(result)
 
 # SnowFlake query
