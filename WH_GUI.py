@@ -1,6 +1,7 @@
 from tkinter import *
 from tkinter import ttk
 import csv
+import threading
 
 try:
     import snowflake.connector
@@ -26,18 +27,11 @@ def clear_all_input():
     clear_barcode_box()
     barcodeList.clear()
 
-def create_result(*args):
+def record_barcode(*args):
     barcode = scannedBarcode.get()
     if barcode and barcode[-3:] == suffix.get():
         barcodeList.append(barcode)
         insertBarcodeBox(len(barcodeList), barcode)
-
-# save generated sheet to csv file
-def save_to_csv(result):
-    with open('./sheet.csv', 'w') as file:
-        writer = csv.writer(file, lineterminator='\n')
-        writer.writerow(('Casefile ID', 'Age'))
-        writer.writerows(result)
 
 # SnowFlake query
 def query_snowflake():
@@ -53,25 +47,28 @@ def query_snowflake():
     sqlQuery = """select casefile_id as "Casefile ID", DATEDIFF(DAY, samp.collectiondate, CURRENT_DATE) AS "Sample Age" from "LIMSDB"."LIMSDB_PRODLIMS"."PARENTKIT" pk
     LEFT JOIN "LIMSDB"."LIMSDB_PRODLIMS"."PARENTKIT_SAMPLE" pks ON pk.id = pks.parentkit_id
     LEFT JOIN "LIMSDB"."LIMSDB_PRODLIMS"."SAMPLE" samp ON pks.sample_id = samp.id
-    WHERE  samp.barcode IN (""" + listString + """);"""
+    WHERE  samp.barcode IN ({barcodes});"""
 
-    result = snowFlakeCursor.execute(sqlQuery)
     copyResult = []
-
-    for res in result:
-        copyResult.append(res)
-        sheet.insert('', END, values=res)
-
+    
+    try:
+        result = snowFlakeCursor.execute(sqlQuery.format(barcodes=listString))
+        for res in result:
+            copyResult.append(res)
+            sheet.insert('', END, values=res)
+    except:
+        print("Failed to query from SnowFlake!")
+        
     sheet.grid(row=0, column=0)
 
     saveButtonFrame = Frame(master=popWindow)
     saveButtonFrame.grid(row=1)
     # save to csv button
-    saveButton = Button(master=saveButtonFrame, text="Save", command=save_to_csv(copyResult))
+    saveButton = Button(master=saveButtonFrame, text="Save", command=lambda:save_to_csv(copyResult))
     saveButton.grid(row=0, column=0)
 
     # save to HTML benchworksheet
-    sheetButton = Button(master=saveButtonFrame, text="Bechworksheet", command=generate_benchworksheet(copyResult))
+    sheetButton = Button(master=saveButtonFrame, text="Bechworksheet", command=lambda:generate_benchworksheet(copyResult))
     sheetButton.grid(row=0, column=1)
 
 def generate_barcode_list_string():
@@ -101,7 +98,27 @@ def remove_index_barcode():
     except:
         codeRemoveEntry.delete(0,END)
 
+def destroy_pop_window(win:Toplevel):
+    win.destroy()
 
+def warning_pop_window(message):
+    popWindow = Toplevel()
+    Label(master=popWindow, text=message, pady=10).pack()
+    Button(master=popWindow, text=" OK ", command=lambda:destroy_pop_window(popWindow)).pack()
+    popWindow.minsize(300,100)
+
+# save generated sheet to csv file
+def save_to_csv(result):
+    try:
+        with open('./sheet.csv', 'w') as file:
+            writer = csv.writer(file, lineterminator='\n')
+            writer.writerow(('Casefile ID', 'Age'))
+            writer.writerows(result)
+    except:
+        print("Failed to write csv file!")
+        warning_pop_window("Failed to write csv file!\n\nPlease close existing file!")
+
+# generate HTML format benchworksheet
 def generate_benchworksheet(result):
     header = """
     <!DOCTYPE html>
@@ -129,17 +146,28 @@ def generate_benchworksheet(result):
     </html>
     """
 
-    with open('./benchworksheet.html', 'w') as file:
-        file.write(header)
-        for res in result:
-            file.write(singleCase.format(caseFileId=res[0], sampleAge=res[1]))
-        file.write(ending)
+    try:
+        with open('./benchworksheet.html', 'w') as file:
+            file.write(header)
+            for res in result:
+                file.write(singleCase.format(caseFileId=res[0], sampleAge=res[1]))
+            file.write(ending)
+    except:
+        print("Failed to write bench file!")
+        warning_pop_window("Failed to write benchworksheet file!\n\nPlease close existing file!")
 
-
-def log_in_SnowFlake():
+        
+def log_in_thread():
     global snowFlakeCursor
     credentials = {'account': 'natera', 'user': userNameEntry.get(), 'authenticator': 'externalbrowser'}
-    snowFlakeCursor = snowflake.connector.connect(**credentials).cursor()
+    try:
+        snowFlakeCursor = snowflake.connector.connect(**credentials).cursor()
+    except:
+        print("Failed to Log-In!")
+
+def log_in_SnowFlake():
+    logInThread = threading.Thread(target=log_in_thread, daemon=True)
+    logInThread.start()
 
 # app name
 window = Tk()
@@ -148,7 +176,7 @@ window.title("Women's Health ___ Snowflake")
 # global variables
 barcodeList = []
 scannedBarcode = StringVar()
-scannedBarcode.trace_add("write", create_result)
+scannedBarcode.trace_add("write", record_barcode)
 suffixList = ["BXE", "BXS"]
 suffix = StringVar()
 suffix.set("BXE")
